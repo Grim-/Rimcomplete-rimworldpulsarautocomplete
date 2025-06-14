@@ -1,0 +1,27 @@
+{
+  "name": "rimcomplete",
+  "version": "0.1.0",
+  "description": "Autocomplete for RimWorld XML definitions",
+  "main": "./lib/main",
+  "activationCommands": {},
+  "repository": "",
+  "license": "MIT",
+  "engines": {
+    "pulsar": "*"
+  },
+  "providedServices": {
+    "autocomplete.provider": {
+      "versions": {
+        "2.0.0": "getProvider"
+      }
+    }
+  },
+  "configSchema": {
+    "rimworldPath": {
+      "title": "RimWorld Installation Path",
+      "description": "Path to your RimWorld installation directory",
+      "type": "string",
+      "default": ""
+    }
+  }
+}
