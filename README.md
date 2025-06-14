@@ -2,6 +2,11 @@
 
 A simple brute-force autocomplete package for referencing `defName` values in RimWorld XML modding within the Pulsar editor.
 
+![image](https://github.com/user-attachments/assets/6d942a4c-3b66-405a-a64e-ee9f86d45d8a)
+
+![image](https://github.com/user-attachments/assets/a627b601-a138-4a20-b6c4-489af9ec619f)
+
+
 ## Installation
 
 1. Copy the package folder to your Pulsar packages directory
