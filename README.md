@@ -2,6 +2,11 @@
 
 A simple brute-force autocomplete package for referencing `defName` values in RimWorld XML modding within the Pulsar editor.
 
+![image](https://github.com/user-attachments/assets/6d942a4c-3b66-405a-a64e-ee9f86d45d8a)
+
+![image](https://github.com/user-attachments/assets/a627b601-a138-4a20-b6c4-489af9ec619f)
+
+
 ## Installation
 
 1. Copy the package folder to your Pulsar packages directory
@@ -60,10 +65,7 @@ Supported definition types include: `thing`, `hediff`, `research`, `trait`, `rec
 
 ## Features
 
-- **On-demand cache generation** - No startup delays, generate cache when you need it
-- **Progress tracking** - Real-time progress updates during cache generation
-- **Responsive UI** - Editor stays usable during cache generation
-- **Comprehensive scanning** - Recursively scans all definition folders and subfolders
+- **cache generation** - No startup delays, generate cache when you need it
 - **Multi-format support** - Supports both direct mod structures (`ModName/Defs/`) and versioned structures (`ModName/1.5/Defs/`)
 - **Flexible parsing** - Parses both `<defName>` tags and `Name=""` attributes
 - **Smart filtering** - Filters suggestions based on partial text matching
