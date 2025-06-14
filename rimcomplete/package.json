@@ -1,27 +1,30 @@
 {
   "name": "rimcomplete",
-  "version": "0.1.0",
-  "description": "Autocomplete for RimWorld XML definitions",
   "main": "./lib/main",
-  "activationCommands": {},
-  "repository": "",
-  "license": "MIT",
+  "version": "0.1.0",
+  "description": "Autocomplete for RimWorld XML modding",
+  "keywords": [
+    "rimworld",
+    "autocomplete",
+    "xml"
+  ],
+  "activationHooks": ["language-xml:grammar-used"],
   "engines": {
-    "pulsar": "*"
+    "atom": ">=1.0.0 <2.0.0"
+  },
+  "configSchema": {
+    "rimworldPath": {
+      "type": "string",
+      "default": "",
+      "title": "RimWorld Installation Path",
+      "description": "Path to your RimWorld installation folder (e.g., C:\\Program Files (x86)\\Steam\\steamapps\\common\\RimWorld)"
+    }
   },
   "providedServices": {
     "autocomplete.provider": {
       "versions": {
-        "2.0.0": "getProvider"
+        "4.0.0": "provide"
       }
-    }
-  },
-  "configSchema": {
-    "rimworldPath": {
-      "title": "RimWorld Installation Path",
-      "description": "Path to your RimWorld installation directory",
-      "type": "string",
-      "default": ""
     }
   }
 }

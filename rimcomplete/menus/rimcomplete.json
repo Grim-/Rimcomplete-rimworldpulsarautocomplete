@@ -1,0 +1,26 @@
+{
+  "menu": [
+    {
+      "label": "Packages",
+      "submenu": [
+        {
+          "label": "RimComplete",
+          "submenu": [
+            {
+              "label": "Generate Cache",
+              "command": "rimcomplete:generate-cache"
+            },
+            {
+              "label": "Clear Cache",
+              "command": "rimcomplete:clear-cache"
+            },
+            {
+              "label": "Reload Definitions",
+              "command": "rimcomplete:reload"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

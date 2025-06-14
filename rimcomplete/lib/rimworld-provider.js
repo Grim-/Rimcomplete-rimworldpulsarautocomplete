@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 class RimWorldProvider {
   constructor() {
@@ -7,7 +8,9 @@ class RimWorldProvider {
     this.inclusionPriority = 1;
     this.excludeLowerPriority = true;
     this.definitions = new Map();
-    this.loadDefinitions();
+    this.cacheFile = path.join(os.homedir(), '.rimworld-autocomplete-cache.json');
+
+    this.loadFromCacheOnly();
   }
 
   getSuggestions({ editor, bufferPosition, scopeDescriptor, prefix }) {
@@ -52,6 +55,13 @@ class RimWorldProvider {
       return;
     }
 
+    if (this.loadFromCache(rimworldPath)) {
+      console.log('Loaded definitions from cache');
+      return;
+    }
+
+    console.log('Cache miss, scanning definitions...');
+
     // Scan Data folder (Core + DLCs)
     const dataPath = path.join(rimworldPath, 'Data');
     if (fs.existsSync(dataPath)) {
@@ -68,25 +78,19 @@ class RimWorldProvider {
       }
     }
 
-    // Scan Mods folder
     const modsPath = path.join(rimworldPath, 'Mods');
     if (fs.existsSync(modsPath)) {
       try {
         const modDirs = fs.readdirSync(modsPath);
-        console.log(`Found ${modDirs.length} total mod folders`);
 
         modDirs.forEach(modDir => {
           const modPath = path.join(modsPath, modDir);
 
           if (fs.existsSync(modPath) && fs.statSync(modPath).isDirectory()) {
-            let foundDefs = false;
-
             // Check direct Defs folder
             const directDefsPath = path.join(modPath, 'Defs');
             if (fs.existsSync(directDefsPath)) {
-              console.log(`Scanning ${modDir}/Defs`);
               this.scanDefinitions(directDefsPath);
-              foundDefs = true;
             }
 
             // Check version folders (1.4, 1.5, etc.)
@@ -95,17 +99,10 @@ class RimWorldProvider {
               modContents.forEach(subFolder => {
                 const versionDefsPath = path.join(modPath, subFolder, 'Defs');
                 if (fs.existsSync(versionDefsPath)) {
-                  console.log(`Scanning ${modDir}/${subFolder}/Defs`);
                   this.scanDefinitions(versionDefsPath);
-                  foundDefs = true;
                 }
               });
             } catch (e) {
-              // Skip if can't read mod contents
-            }
-
-            if (!foundDefs) {
-              console.log(`No Defs found in ${modDir}`);
             }
           }
         });
@@ -114,9 +111,57 @@ class RimWorldProvider {
       }
     }
 
+    this.saveToCache(rimworldPath);
+
     console.log('Final counts:');
     for (const [type, defs] of this.definitions.entries()) {
       console.log(`  ${type}: ${defs.length}`);
+    }
+  }
+
+  loadFromCache(rimworldPath) {
+    try {
+      if (!fs.existsSync(this.cacheFile)) {
+        return false;
+      }
+
+      const cacheData = JSON.parse(fs.readFileSync(this.cacheFile, 'utf8'));
+
+      if (cacheData.rimworldPath !== rimworldPath) {
+        return false;
+      }
+
+      const cacheTime = new Date(cacheData.timestamp);
+      const modsPath = path.join(rimworldPath, 'Mods');
+
+      if (fs.existsSync(modsPath)) {
+        const modsModTime = fs.statSync(modsPath).mtime;
+        if (modsModTime > cacheTime) {
+          return false;
+        }
+      }
+
+      this.definitions = new Map(cacheData.definitions);
+      return true;
+
+    } catch (error) {
+      console.log('Cache load failed:', error.message);
+      return false;
+    }
+  }
+
+  saveToCache(rimworldPath) {
+    try {
+      const cacheData = {
+        rimworldPath: rimworldPath,
+        timestamp: new Date().toISOString(),
+        definitions: Array.from(this.definitions.entries())
+      };
+
+      fs.writeFileSync(this.cacheFile, JSON.stringify(cacheData, null, 2));
+      console.log('Definitions cached to:', this.cacheFile);
+    } catch (error) {
+      console.error('Failed to save cache:', error);
     }
   }
 
@@ -130,7 +175,6 @@ class RimWorldProvider {
         }
       });
     } catch (error) {
-      // Skip if can't read defs directory
     }
   }
 
@@ -143,15 +187,13 @@ class RimWorldProvider {
         const stat = fs.statSync(itemPath);
 
         if (stat.isFile() && path.extname(item) === '.xml') {
-          // It's an XML file, parse it
           this.parseXMLFile(itemPath);
         } else if (stat.isDirectory()) {
-          // It's a subfolder, recurse into it
           this.scanXMLFiles(itemPath);
         }
       });
     } catch (error) {
-      // Skip if can't scan folder
+
     }
   }
 
@@ -181,9 +223,6 @@ class RimWorldProvider {
         'EffecterDef': 'effecter'
       };
 
-      let foundAny = false;
-
-      // Find defName tags
       const defNameRegex = /<defName>([^<]+)<\/defName>/g;
       let match;
 
@@ -191,41 +230,29 @@ class RimWorldProvider {
         const defName = match[1];
         const beforeDefName = xmlContent.substring(0, match.index);
 
-        console.log(`Found defName: ${defName} in ${path.basename(filePath)}`);
-
         for (const [xmlDefType, simpleType] of Object.entries(defTypeMappings)) {
           const lastDefTypeIndex = beforeDefName.lastIndexOf(`<${xmlDefType}`);
           if (lastDefTypeIndex !== -1) {
             const lastClosingIndex = beforeDefName.lastIndexOf(`</${xmlDefType}>`);
-            console.log(`  Checking ${xmlDefType}: openIndex=${lastDefTypeIndex}, closeIndex=${lastClosingIndex}`);
             if (lastClosingIndex < lastDefTypeIndex) {
-              console.log(`  ✓ Adding ${defName} as ${simpleType}`);
               this.addDefinition(simpleType, defName);
-              foundAny = true;
               break;
             }
           }
         }
       }
 
-      // Find Name attributes
       Object.entries(defTypeMappings).forEach(([xmlDefType, simpleType]) => {
         const nameAttrRegex = new RegExp(`<${xmlDefType}[^>]*Name="([^"]+)"`, 'g');
         let nameMatch;
 
         while ((nameMatch = nameAttrRegex.exec(xmlContent)) !== null) {
-          console.log(`Found Name attribute: ${nameMatch[1]} for ${xmlDefType}`);
           this.addDefinition(simpleType, nameMatch[1]);
-          foundAny = true;
         }
       });
 
-      if (!foundAny) {
-        console.log(`No definitions found in ${path.basename(filePath)}`);
-      }
-
     } catch (error) {
-      console.error(`Error parsing ${filePath}:`, error);
+      // Skip if can't parse file
     }
   }
 
@@ -237,6 +264,147 @@ class RimWorldProvider {
     if (!defs.includes(defName)) {
       defs.push(defName);
     }
+  }
+
+  clearCache() {
+    try {
+      if (fs.existsSync(this.cacheFile)) {
+        fs.unlinkSync(this.cacheFile);
+        console.log('Cache file deleted');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to clear cache:', error);
+      return false;
+    }
+  }
+
+  loadFromCacheOnly() {
+    const rimworldPath = atom.config.get('rimcomplete.rimworldPath');
+    if (rimworldPath && this.loadFromCache(rimworldPath)) {
+      console.log('Loaded definitions from cache');
+    } else {
+      console.log('No cache found - use "Generate Cache" to scan definitions');
+    }
+  }
+
+  async generateCacheWithProgress(progressCallback) {
+    console.log('Starting cache generation...');
+    this.definitions.clear();
+
+    const rimworldPath = atom.config.get('rimcomplete.rimworldPath');
+    if (!rimworldPath || !fs.existsSync(rimworldPath)) {
+      throw new Error('Invalid RimWorld path');
+    }
+
+    const pathsToScan = [];
+
+    const dataPath = path.join(rimworldPath, 'Data');
+    if (fs.existsSync(dataPath)) {
+      const dataFolders = fs.readdirSync(dataPath);
+      dataFolders.forEach(folder => {
+        const defsPath = path.join(dataPath, folder, 'Defs');
+        if (fs.existsSync(defsPath)) {
+          pathsToScan.push({ path: defsPath, name: `Data/${folder}` });
+        }
+      });
+    }
+
+    // Add Mod folders
+    const modsPath = path.join(rimworldPath, 'Mods');
+    if (fs.existsSync(modsPath)) {
+      const modDirs = fs.readdirSync(modsPath);
+      modDirs.forEach(modDir => {
+        const modPath = path.join(modsPath, modDir);
+        if (fs.existsSync(modPath) && fs.statSync(modPath).isDirectory()) {
+          const directDefsPath = path.join(modPath, 'Defs');
+          if (fs.existsSync(directDefsPath)) {
+            pathsToScan.push({ path: directDefsPath, name: `Mod: ${modDir}` });
+          }
+
+          try {
+            const modContents = fs.readdirSync(modPath);
+            modContents.forEach(subFolder => {
+              const versionDefsPath = path.join(modPath, subFolder, 'Defs');
+              if (fs.existsSync(versionDefsPath)) {
+                pathsToScan.push({ path: versionDefsPath, name: `Mod: ${modDir}/${subFolder}` });
+              }
+            });
+          } catch (e) {
+          }
+        }
+      });
+    }
+
+    if (pathsToScan.length === 0) {
+      throw new Error('No definition folders found');
+    }
+
+    for (let i = 0; i < pathsToScan.length; i++) {
+      const { path: scanPath, name } = pathsToScan[i];
+
+      if (progressCallback) {
+        progressCallback(i + 1, pathsToScan.length, name);
+      }
+      await this.scanDefinitionsAsync(scanPath);
+      await new Promise(resolve => setImmediate(resolve));
+    }
+
+    this.saveToCache(rimworldPath);
+
+    console.log('Final counts:');
+    for (const [type, defs] of this.definitions.entries()) {
+      console.log(`  ${type}: ${defs.length}`);
+    }
+
+    return pathsToScan.length;
+  }
+
+  async scanDefinitionsAsync(defsPath) {
+    try {
+      const folders = fs.readdirSync(defsPath);
+
+      for (const folder of folders) {
+        const folderPath = path.join(defsPath, folder);
+        if (fs.statSync(folderPath).isDirectory()) {
+          await this.scanXMLFilesAsync(folderPath);
+        }
+      }
+    } catch (error) {
+      // Skip if can't read defs directory
+    }
+  }
+
+  async scanXMLFilesAsync(folderPath) {
+    try {
+      const items = fs.readdirSync(folderPath);
+      let fileCount = 0;
+
+      for (const item of items) {
+        const itemPath = path.join(folderPath, item);
+        const stat = fs.statSync(itemPath);
+
+        if (stat.isFile() && path.extname(item) === '.xml') {
+          this.parseXMLFile(itemPath);
+          fileCount++;
+
+          if (fileCount % 4 === 0) {
+            await new Promise(resolve => setImmediate(resolve));
+          }
+        } else if (stat.isDirectory()) {
+          await this.scanXMLFilesAsync(itemPath);
+        }
+      }
+    } catch (error) {
+      // Skip if can't scan folder
+    }
+  }
+
+  reloadDefinitions() {
+    this.definitions.clear();
+    this.clearCache();
+    this.loadDefinitions();
   }
 
   dispose() {
